@@ -7,7 +7,7 @@ import os
 
 # KCDA의 openapi 주소와 key
 service_url = 'http://openapi.data.go.kr/openapi/service/rest/Covid19/getCovid19InfStateJson'
-service_key = ''
+service_key = '' # API 신청 후 받은 키 입력
 
 start_date = '20200301' # 요청 시작일
 end_date = '20210626' # 요청 마감일
