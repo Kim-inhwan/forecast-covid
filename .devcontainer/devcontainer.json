@@ -1,0 +1,13 @@
+{
+    "name": "tensorflow",
+    "image": "moreih29/tensorflow-gpu:v1.7.1",
+    "extensions": [
+        "ms-python.python",
+	    "mutantdino.resourcemonitor",
+        "alphabotsec.vscode-eclipse-keybindings",
+    ],
+    "settings": { 
+		"python.languageServer": "Pylance",
+	},
+    "runArgs": ["--name", "tf_gpu2", "--gpus", "all"],
+}
