@@ -79,15 +79,20 @@ def evaluation(y_true, y_pred, methods):
 
 if __name__=='__main__':
     data_gen = create_data_gen()
-    seq2seq, history = create_model_and_train(data_gen)
+    # seq2seq, history = create_model_and_train(data_gen)
 
-    os.makedirs('./images', exist_ok=True)
+    # os.makedirs('./images', exist_ok=True)
 
-    plt.plot(history.history['loss'], label='loss')
-    plt.plot(history.history['val_loss'], label='val_loss')
-    plt.legend()
-    plt.savefig(f'./images/model_history.png')
-    plt.close()
+    # plt.plot(history.history['loss'], label='loss')
+    # plt.plot(history.history['val_loss'], label='val_loss')
+    # plt.legend()
+    # plt.savefig(f'./images/model_history.png')
+    # plt.close()
+
+    seq2seq = Seq2Seq(units=LAYER_SIZE, 
+                      input_width=INPUT_WIDTH, feature_num=len(feature_cols),
+                      label_width=LABEL_WIDTH, attention=ATTENTION)
+    seq2seq.model.load_weights(f'./models/{model_fname}')
 
     for inp, targ in data_gen.test.batch(data_gen.test_size):
         preds = seq2seq.predict(inp)
