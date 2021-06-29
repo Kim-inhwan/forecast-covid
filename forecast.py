@@ -15,9 +15,9 @@ from seq2seq import Seq2Seq
 INPUT_WIDTH = 21
 LABEL_WIDTH = 15
 LAYER_SIZE = 256
-EPOCHS = 500
+EPOCHS = 150
 MIN_EPOCH = 100
-BATCH_SIZE = 64
+BATCH_SIZE = 512
 ATTENTION = True
 
 RMSE = lambda x, y: mean_squared_error(x, y, squared=False)
@@ -36,23 +36,23 @@ def create_data_gen():
                              input_width=INPUT_WIDTH, label_width=LABEL_WIDTH,
                              feature_cols=feature_cols,
                              label_cols=label_cols,
-                             norm=True,
-                             train_split=0.6, val_split=0.2, test_split=0.2)
+                             norm=True, training=True,
+                             train_split=1, val_split=0, test_split=0)
     return data_gen
 
 
 def create_model_and_train(data_gen):
-    train_callbacks = [EarlyStopping(min_epoch=MIN_EPOCH, patience=50,
+    train_callbacks = [EarlyStopping(min_epoch=MIN_EPOCH, patience=50, monitor='loss',
                                      verbose=1, restore_best_weights=True),
-                       ModelCheckpoint(filepath=f'./models/{model_fname}', 
+                       ModelCheckpoint(filepath=f'./models/{model_fname}', monitor='loss',
                             save_best_only=True, save_weights_only=True,
                             min_epoch=MIN_EPOCH, verbose=1)]
 
     seq2seq = Seq2Seq(units=LAYER_SIZE, 
                       input_width=INPUT_WIDTH, feature_num=len(feature_cols),
                       label_width=LABEL_WIDTH, attention=ATTENTION)
-    history = seq2seq.train(data_gen.train.batch(BATCH_SIZE), 
-                            val_ds=data_gen.val.batch(BATCH_SIZE),
+    history = seq2seq.train(data_gen.dataset.batch(BATCH_SIZE), 
+                            # val_ds=data_gen.val.batch(BATCH_SIZE),
                             epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=1,
                             callbacks=train_callbacks)
     return seq2seq, history
@@ -79,28 +79,40 @@ def evaluation(y_true, y_pred, methods):
 
 if __name__=='__main__':
     data_gen = create_data_gen()
-    # seq2seq, history = create_model_and_train(data_gen)
+    seq2seq, history = create_model_and_train(data_gen)
 
-    # os.makedirs('./images', exist_ok=True)
+    os.makedirs('./images', exist_ok=True)
 
-    # plt.plot(history.history['loss'], label='loss')
+    plt.plot(history.history['loss'], label='loss')
     # plt.plot(history.history['val_loss'], label='val_loss')
-    # plt.legend()
-    # plt.savefig(f'./images/model_history.png')
-    # plt.close()
+    plt.legend()
+    plt.savefig(f'./images/model_history.png')
+    plt.close()
 
-    seq2seq = Seq2Seq(units=LAYER_SIZE, 
-                      input_width=INPUT_WIDTH, feature_num=len(feature_cols),
-                      label_width=LABEL_WIDTH, attention=ATTENTION)
-    seq2seq.model.load_weights(f'./models/{model_fname}')
+    # seq2seq = Seq2Seq(units=LAYER_SIZE, 
+    #                   input_width=INPUT_WIDTH, feature_num=len(feature_cols),
+    #                   label_width=LABEL_WIDTH, attention=ATTENTION)
+    # seq2seq.model.load_weights(f'./models/{model_fname}')
 
-    for inp, targ in data_gen.test.batch(data_gen.test_size):
+    for inp, targ in data_gen.dataset.batch(data_gen.data_size):
         preds = seq2seq.predict(inp)
     
-    plt.plot(tf.concat([targ[:, 0], targ[-1, :]], axis=0))
+    plt.plot(tf.concat([targ[:, 0], targ[-1, 1:]], axis=0))
     for i, pred in enumerate(preds):
         plt.plot(range(i, i+LABEL_WIDTH), pred)
     plt.savefig('./images/model_predict_value(test).png')
+    plt.close()
+
+    plt.plot(targ[:, 0], label='targ')
+    plt.plot(preds[:, 0], label='preds')
+    plt.legend()
+    plt.savefig('./images/model_predict(test_step).png')
+    plt.close()
+
+    plt.plot(targ[:, LABEL_WIDTH-1], label='targ')
+    plt.plot(preds[:, LABEL_WIDTH-1], label='preds')
+    plt.legend()
+    plt.savefig(f'./images/model_predict(test_step{LABEL_WIDTH-1}).png')
     plt.close()
 
     with open(f'./data/{covid_fname[:-4]}_scaler.pkl', 'rb') as f:

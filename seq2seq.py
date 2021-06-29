@@ -37,9 +37,10 @@ class Decoder(tf.keras.layers.Layer):
     인코더의 모든 step에서의 출력을 추가로 참고하여 state를 계산
     다양한 종류의 Attention이 있으며 여기서는 dot-product attention을 사용
     '''
-    def __init__(self, units, attention=False, *args, **kwargs):
+    def __init__(self, units, step, attention=False, *args, **kwargs):
         super(Decoder, self).__init__(*args, **kwargs)
         self.units = units
+        self.step = step
         self.attention = attention
 
         self.gru = tf.keras.layers.GRU(units, 
@@ -59,7 +60,7 @@ class Decoder(tf.keras.layers.Layer):
         sub_input = inputs[:, tf.newaxis, tf.newaxis, 0] # (batch, 1, 1)
         state = hidden
         # 학습 과정일 경우 teacher forcing을 사용함
-        for t in range(inputs.shape[1]):
+        for t in range(self.step):
             if self.attention:
                 # context_vec => (batch, 1, enc_dim)
                 context_vec, attn_weight = self.attn([state[:, tf.newaxis, :,], enc_output],
@@ -91,7 +92,7 @@ class Decoder(tf.keras.layers.Layer):
                     attn_weights = attn_weight
 
             # 마지막 step일 때 t+1로 인해 index error가 발생하므로 pass
-            if t < inputs.shape[1]-1:
+            if t < self.step-1:
                 if training:
                     # 학습 시, 다음 실제 값을 decoder의 입력으로 사용
                     sub_input = inputs[:, tf.newaxis, tf.newaxis, t+1]
@@ -100,7 +101,7 @@ class Decoder(tf.keras.layers.Layer):
                     sub_input = output
         
         # (batch, predict_step)
-        outputs = tf.squeeze(outputs)
+        outputs = tf.squeeze(outputs, axis=[2])
         self.attn_wegiths = attn_weights
 
         return outputs
@@ -127,7 +128,7 @@ class Seq2Seq():
         self.enc_input = tf.keras.Input(shape=(self.input_width, self.feature_num))
         self.encoder = Encoder(self.units)
         self.dec_input = tf.keras.Input(shape=(self.label_width))
-        self.decoder = Decoder(self.units, attention=self.attention)
+        self.decoder = Decoder(self.units, self.label_width, attention=self.attention)
 
         enc_outputs, enc_state = self.encoder(self.enc_input)
         dec_outputs = self.decoder(self.dec_input, enc_state, enc_outputs)

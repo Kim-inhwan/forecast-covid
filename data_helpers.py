@@ -28,17 +28,21 @@ class DataGenerator():
     '''
 
     def __init__(self, raw_data, input_width, label_width, 
-                feature_cols, label_cols, shift=1, stride=1, norm=True,
+                feature_cols, label_cols, shift=1, stride=1, norm=True, training=True,
                 train_split=0.75, val_split=0.15, test_split=0.2):
         self.input_width = input_width
         self.label_width = label_width
         self.shift = shift
         self.stride = stride
         self.norm = norm
+        self.training = training
         self.feature_cols = feature_cols
         self.label_cols = label_cols
         self.raw_data = raw_data
-        self.window_size = input_width+label_width
+        if training:
+            self.window_size = input_width+label_width
+        else:
+            self.window_size = input_width
         self.data_size = len(raw_data)-self.window_size+1
         self.train_size = int(train_split*self.data_size)
         self.val_size = int(val_split*self.data_size)
@@ -66,8 +70,12 @@ class DataGenerator():
         # 학습 시에는 교사 강요(teacher forcing)를 사용하기 때문에 모두 입력으로 사용하고
         # 예측 시에는 [3]만 입력 신호로 사용하고 이후는 예측 값을 다시 입력으로 사용한다.
         def slice_feature_label(feature_batch, label_batch):
-            return ((feature_batch[:self.input_width], label_batch[-self.label_width-1:-1]),
-                        label_batch[-self.label_width:])
+            if self.training:
+                return ((feature_batch[:self.input_width], label_batch[-self.label_width-1:-1]),
+                           label_batch[-self.label_width:])
+            else:
+                return ((feature_batch, label_batch[-1:]), label_batch[-1:])
+                
         if self.norm:
             scaler = MinMaxScaler()
             feature_data = scaler.fit_transform(self.raw_data[self.feature_cols].values)
