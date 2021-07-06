@@ -13,7 +13,7 @@ class Encoder(tf.keras.layers.Layer):
         self.units = units
         self.gru = tf.keras.layers.GRU(units, 
                                        return_sequences=True, 
-                                       return_state=True)
+                                       return_state=True,)
     
     def call(self, inputs, training=False):
         outputs, state = self.gru(inputs)
@@ -45,7 +45,7 @@ class Decoder(tf.keras.layers.Layer):
 
         self.gru = tf.keras.layers.GRU(units, 
                                        return_sequences=True,
-                                       return_state=True)
+                                       return_state=True,)
         if attention:
             self.attn = tf.keras.layers.Attention()
         self.dense = tf.keras.layers.Dense(1, activation='relu')
