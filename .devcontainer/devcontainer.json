@@ -1,6 +1,10 @@
 {
-    "name": "tensorflow",
-    "image": "moreih29/tensorflow-gpu:v1.7.1",
+    "name": "forecast-covid",
+    "dockerComposeFile": [
+        "docker-compose-dev.yml",
+    ],
+    "service": "tensorflow",
+    "workspaceFolder": "/app",
     "extensions": [
         "ms-python.python",
 	    "mutantdino.resourcemonitor",
@@ -9,5 +13,4 @@
     "settings": { 
 		"python.languageServer": "Pylance",
 	},
-    "runArgs": ["--name", "tf_gpu2", "--gpus", "all"],
 }
