@@ -7,9 +7,10 @@ import pickle
 from sklearn.metrics import (mean_absolute_error,
                              mean_absolute_percentage_error,
                              mean_squared_error)
-from custom_callbacks import EarlyStopping, ModelCheckpoint
-from data_helpers import DataGenerator
-from seq2seq import Seq2Seq
+
+from utils.callbacks import EarlyStopping, ModelCheckpoint
+from utils.dataset import DataGenerator
+from seq2seq.seq2seq import Seq2Seq
 
 
 INPUT_WIDTH = 21
@@ -24,14 +25,14 @@ RMSE = lambda x, y: mean_squared_error(x, y, squared=False)
 MAE = mean_absolute_error
 MAPE = mean_absolute_percentage_error
 
-covid_fname = 'covid_20200301_20210619.csv'
-model_fname = f'seq2seq_attn({ATTENTION})_iw{INPUT_WIDTH}_lw{LABEL_WIDTH}_ls{LAYER_SIZE}.h5'
-feature_cols = ['decideDailyCnt']
-label_cols = 'decideDailyCnt'
+covid_fname = "covid_20200301_20210619.csv"
+model_fname = f"seq2seq_attn({ATTENTION})_iw{INPUT_WIDTH}_lw{LABEL_WIDTH}_ls{LAYER_SIZE}.h5"
+feature_cols = ["decideDailyCnt"]
+label_cols = "decideDailyCnt"
 
 
 def create_data_gen():
-    covid_data = pd.read_csv(f'./data/{covid_fname}')
+    covid_data = pd.read_csv(f"./data/{covid_fname}")
     data_gen = DataGenerator(raw_data=covid_data,
                              input_width=INPUT_WIDTH, label_width=LABEL_WIDTH,
                              feature_cols=feature_cols,
@@ -44,7 +45,7 @@ def create_data_gen():
 def create_model_and_train(data_gen):
     train_callbacks = [EarlyStopping(min_epoch=MIN_EPOCH, patience=50, 
                                      verbose=1, restore_best_weights=True),
-                       ModelCheckpoint(filepath=f'./models/{model_fname}',
+                       ModelCheckpoint(filepath=f"./models/{model_fname}",
                             save_best_only=True, save_weights_only=True,
                             min_epoch=MIN_EPOCH, verbose=1)]
 
@@ -59,7 +60,7 @@ def create_model_and_train(data_gen):
 
 
 def evaluation(y_true, y_pred, methods):
-    '''
+    """
         Args:
             y_true (numpy.array): (batch, LABEL_WIDTH) 형태의 실제 값
             y_pred (numpy.array): (batch, LABEL_WIDTH) 형태의 예측 값
@@ -69,7 +70,7 @@ def evaluation(y_true, y_pred, methods):
             results (numpy.array): (batch, len(methods)) 형태의 성능 평가 값
 
         methods 리스트 내부에 사용될 method는 기본적으로 리스트 형태의 x, y를 받아 결과를 출력하는 형태의 함수
-    '''
+    """
     results = [[method(x, y) for method in methods] for x, y in zip(y_true, y_pred)]
     results = np.array(results)
     results = np.mean(results, axis=0)
@@ -77,30 +78,30 @@ def evaluation(y_true, y_pred, methods):
     return  results
 
 
-if __name__=='__main__':
+if __name__=="__main__":
     # data_gen = create_data_gen()
     # seq2seq, history = create_model_and_train(data_gen)
 
-    # os.makedirs('./images', exist_ok=True)
+    # os.makedirs("./images", exist_ok=True)
 
-    # plt.plot(history.history['loss'], label='loss')
-    # plt.plot(history.history['val_loss'], label='val_loss')
+    # plt.plot(history.history["loss"], label="loss")
+    # plt.plot(history.history["val_loss"], label="val_loss")
     # plt.legend()
-    # plt.savefig(f'./images/model_history.png')
+    # plt.savefig(f"./images/model_history.png")
     # plt.close()
 
     # # seq2seq = Seq2Seq(units=LAYER_SIZE, 
     # #                   input_width=INPUT_WIDTH, feature_num=len(feature_cols),
     # #                   label_width=LABEL_WIDTH, attention=ATTENTION)
-    # # seq2seq.model.load_weights(f'./models/{model_fname}')
+    # # seq2seq.model.load_weights(f"./models/{model_fname}")
 
     # for inp, targ in data_gen.dataset.batch(data_gen.data_size):
     #     preds = seq2seq.predict(inp)
 
-    with open('./data/test.pkl', 'rb') as f:
+    with open("./data/test.pkl", "rb") as f:
         targ, preds = pickle.load(f)
     
-    with open(f'./data/{covid_fname[:-4]}_scaler.pkl', 'rb') as f:
+    with open(f"./data/{covid_fname[:-4]}_scaler.pkl", "rb") as f:
         scaler = pickle.load(f)
 
     targ = scaler.inverse_transform(targ)
@@ -109,22 +110,22 @@ if __name__=='__main__':
     plt.plot(tf.concat([targ[-100:, 0], targ[-1, 1:]], axis=0))
     for i, pred in enumerate(preds[-100:]):
         plt.plot(range(i, i+LABEL_WIDTH), pred)
-    plt.savefig('./images/model_predict_value(test).png')
+    plt.savefig("./images/model_predict_value(test).png")
     plt.close()
 
-    plt.plot(targ[-100:, 0], label='targ')
-    plt.plot(preds[-100:, 0], label='preds')
+    plt.plot(targ[-100:, 0], label="targ")
+    plt.plot(preds[-100:, 0], label="preds")
     plt.legend()
-    plt.savefig('./images/model_predict(test_step).png')
+    plt.savefig("./images/model_predict(test_step).png")
     plt.close()
 
-    # plt.plot(targ[:, LABEL_WIDTH-1], label='targ')
-    # plt.plot(preds[:, LABEL_WIDTH-1], label='preds')
+    # plt.plot(targ[:, LABEL_WIDTH-1], label="targ")
+    # plt.plot(preds[:, LABEL_WIDTH-1], label="preds")
     # plt.legend()
-    # plt.savefig(f'./images/model_predict(test_step{LABEL_WIDTH-1}).png')
+    # plt.savefig(f"./images/model_predict(test_step{LABEL_WIDTH-1}).png")
     # plt.close()
 
     # print(evaluation(scaler.inverse_transform(targ),
     #                  scaler.inverse_transform(preds),
     #                  methods=[RMSE, MAE, MAPE]))    
-    print('done')
+    print("done")

@@ -2,12 +2,17 @@ import tensorflow as tf
 
 
 class Encoder(tf.keras.layers.Layer):
-    ''' 인코더
-    번역 과정(Machine Translation)에서는 source language를 입력으로 받아 특징을 추출
+    """ Seq2Seq 모델의 Encoder layer
+
+    Translation에서는 source language를 입력으로 받아 특징을 추출
+
     시계열 예측에서는 t 이전 시점의 데이터를 입력으로 받고 특징을 추출  
 
-    RNN으로 GRU를 사용함
-    '''
+    GRU를 사용함
+
+    Attributes:
+        units: (int) GRU의 차원
+    """
     def __init__(self, units, *args, **kwargs):
         super(Encoder, self).__init__(*args, **kwargs)
         self.units = units
@@ -21,22 +26,30 @@ class Encoder(tf.keras.layers.Layer):
 
     def get_config(self):
         config = super(Encoder, self).get_config()
-        config.update({'class_name': 'Encoder', 'config': {'units': self.units}})
+        config.update({"class_name": "Encoder", "config": {"units": self.units}})
         return config
 
 
 class Decoder(tf.keras.layers.Layer):
-    ''' 디코더
+    """ Seq2Seq 모델의 Decoder layer
+
     Translation에서는 시작 토큰(e.g., <SOS>)과 인코더의 벡터를 받아 단어를 예측하고, 
     예측한 단어를 다시 입력으로 사용해 연속적으로 예측함. 
 
     시계열 예측에서는 t시점의 데이터를 시작 토큰으로 주고 이후 n-step을 예측함
-    인코더와 동일하게 RNN으로 GRU를 사용    
 
-    Attention의 경우 디코더의 state를 계산할 때 이전 state와 input만을 참고하는 것이 아니라
-    인코더의 모든 step에서의 출력을 추가로 참고하여 state를 계산
+    인코더와 동일하게 GRU를 사용    
+
+    Attention을 사용할 경우 디코더의 state를 계산할 때 이전 state와 input만을 참고하는 것이 아니라 
+    인코더의 모든 step에서의 출력을 추가로 참고하여 state를 계산함.
+
     다양한 종류의 Attention이 있으며 여기서는 dot-product attention을 사용
-    '''
+
+    Attributes:
+        units: (int) GRU의 차원
+        step: (int) output sequences의 길이
+        attention: (bool) Attenion layer를 사용할 지 여부
+    """
     def __init__(self, units, step, attention=False, *args, **kwargs):
         super(Decoder, self).__init__(*args, **kwargs)
         self.units = units
@@ -48,7 +61,7 @@ class Decoder(tf.keras.layers.Layer):
                                        return_state=True,)
         if attention:
             self.attn = tf.keras.layers.Attention()
-        self.dense = tf.keras.layers.Dense(1, activation='relu')
+        self.dense = tf.keras.layers.Dense(1, activation="relu")
 
     def call(self, inputs, hidden, enc_output, training=False):
         # inputs => (batch, label_width)
@@ -108,12 +121,31 @@ class Decoder(tf.keras.layers.Layer):
 
     def get_config(self):
         config = super(Decoder, self).get_config()
-        config.update({'class_name': 'Decoder', 'config': {'units': self.units}})
+        config.update({"class_name": "Decoder", "config": {"units": self.units}})
         return config
 
 
 
 class Seq2Seq():
+    """ Encoder-Decoder 구조의 Seq2Seq 모델
+
+    Attributes:
+        units: (int) 인코더와 디코더에 사용되는 GRU의 차원의 크기
+        input_width: (int) 인코더에 입력될 인풋의 길이
+        feature_num: (int) 인코더에 입력될 인풋의 차원의 크기
+        label_width: (int) 디코더에서 출력할 아웃풋의 길이
+        attention: (bool) 어텐션 레이어를 사용할 지 여부
+        encoder: (class) 인코더 레이어
+        decoder: (class) 디코더 레이어
+        model: (class) 인코더-디코더 구조의 keras 모델
+
+    Examples:
+        >>> seq2seq = Seq2Seq(64, 10, 2, 3, True)
+        >>> prediction = seq2seq.predict((tf.random.uniform(32, 10, 2), tf.random.uniform(32, 1)))
+        >>> prediction.shape
+        (32, 3)
+
+    """
     def __init__(self, units, input_width, feature_num, label_width,
                  attention=False):
         self.units = units
@@ -135,10 +167,10 @@ class Seq2Seq():
 
         self.model = tf.keras.Model(inputs=(self.enc_input, self.dec_input),
                                     outputs=dec_outputs)
-        self.model.compile(loss='mse', optimizer='adam')
+        self.model.compile(loss="mse", optimizer="adam")
 
     def train(self, train_ds, val_ds=None, epochs=1, batch_size=None,
-              verbose='auto', callbacks=None, **kwargs):
+              verbose="auto", callbacks=None, **kwargs):
         history = self.model.fit(train_ds, validation_data=val_ds, 
                                  epochs=epochs, batch_size=batch_size, verbose=verbose,
                                  callbacks=callbacks, **kwargs)

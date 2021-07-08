@@ -2,30 +2,45 @@ from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf
 
 class DataGenerator():
-    ''' 데이터 생성기 
-    시계열 형태의 csv 데이터를 window 크기에 맞춰 input과 label로 분리
-    예:
-        a   b   c
-    0   1   10  100
-    1   2   20  200
-    2   3   30  300
-    3   4   40  400
-    ...
-    29  30  300 3000
+    """ Seq2Seq을 위한 데이터 생성기 
 
-    위와 같은 형태의 csv데이터를 raw_data,
-    feature_cols=['a', 'b'], label_cols='c'이고,
+    시계열 형태의 pandas DataFrame을 window 크기에 맞춰 input과 label로 분리
 
-    input_width=5, label_width=3, shift=1, stride=1 이면,
-    [([[1, 10], [2, 20], [3, 30], [4, 40], [5, 50]], [600, 700, 800]),
-        ([[2, 20], [3, 30], [4, 40], [5, 50], [6, 60]], [700, 800, 900]),
+    Attributes:
+        raw_data: (DataFrame) 크기에 맞는 데이터를 생성할 수 있는 raw data
+        input_width: (int) 입력 시퀀스의 길이
+        label_width: (int) 라벨 시퀀스의 길이
+        feature_cols: (list) 입력 feature의 컬럼 이름 목록
+        label_cols: (str) 라벨로 사용할 컬럼의 이름
+        shift: (int) 다음 생성될 데이터 셋과의 값 차이
+        stride: (int) 생성된 데이터 셋 내의 값의 간격
+        norm: (bool) 데이터를 정규화 할 지 여부
+        training: (bool) 학습을 위한 데이터인 지 여부. 예측을 위한 데이터 생성이라면 label을 생성하지 않음
+        train_split: (float) 학습 데이터 셋의 비율
+        val_split: (float) 검증 데이터 셋의 비율
+        ttest_split: (float) 테스트 데이터 셋의 비율
+
+    Examples:
+        >>> raw_data
+        |index|a   |b   |c   |
+        |0    |1   |10  |100 |
+        |1    |2   |20  |200 |
+        |2    |3   |30  |300 |
+        |3    |4   |40  |400 |
         ...
-        ([[23, 230], [24, 240], [25, 250], [26, 260], [27, 270]], [2800, 2900, 3000])]
+        |29   |30  |300 |3000|
 
-        형태의 tf.data.Dataset를 만든다.
-
-        split은 전체 데이터를 train/val/test로 나눌 비율을 정한다. (합은 1)
-    '''
+        >>> dg = DataGenerator(raw_data, input_width=5, label_width=3, 
+                               feature_cols=["a", "b"], label_cols="c", norm=False)
+        >>> for inp, targ in dg.dataset.take(1):
+                print(inp[0], inp[1], targ)
+        <tf.tensor: shape=(5, 2), dtype=int32, numpy=
+          array([[1, 10], [2, 20], [3, 30], [4, 40], [5, 50]], dtype=int32)>,
+        <tf.tensor: shape=(3,), dtype=int32, numpy=
+          array([500, 600, 700], dtype=int32)>,
+        <tf.tensor: shape=(3,), dtype=int32, numpy=
+          array([600, 700, 800], dtype=int32)>,
+    """
 
     def __init__(self, raw_data, input_width, label_width, 
                 feature_cols, label_cols, shift=1, stride=1, norm=True, training=True,
@@ -54,9 +69,9 @@ class DataGenerator():
         self.make_dataset()
     
     def __repr__(self):
-        return '\n'.join([f'total window: {[_*self.stride for _ in range(self.window_size)]}',
-                        f'input width: {[_*self.stride for _ in range(self.input_width)]}',
-                        f'label width: {[_*self.stride for _ in range(self.input_width, self.window_size)]}'])
+        return "\n".join([f"total window: {[_*self.stride for _ in range(self.window_size)]}",
+                        f"input width: {[_*self.stride for _ in range(self.input_width)]}",
+                        f"label width: {[_*self.stride for _ in range(self.input_width, self.window_size)]}"])
 
     def make_dataset(self):
         # dataset.window를 사용하면 sub dataset을 반환한다.
