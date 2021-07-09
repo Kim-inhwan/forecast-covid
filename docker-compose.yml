@@ -1,0 +1,11 @@
+version: "3"
+
+services:
+    tensorflow:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: tensorflow-service
+        command: bash -c "while sleep 1000; do :; done"
+        volumes:
+            - .:/app
