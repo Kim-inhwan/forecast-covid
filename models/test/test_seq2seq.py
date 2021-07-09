@@ -7,17 +7,17 @@ import pickle
 from sklearn.metrics import (mean_absolute_error,
                              mean_absolute_percentage_error,
                              mean_squared_error)
-
 from utils.callbacks import EarlyStopping, ModelCheckpoint
 from utils.dataset import DataGenerator
-from seq2seq.seq2seq import Seq2Seq
+from utils.collect import get_nation_covid_data
+from models.seq2seq import Seq2Seq
 
 
 INPUT_WIDTH = 21
 LABEL_WIDTH = 15
 LAYER_SIZE = 256
-EPOCHS = 300
-MIN_EPOCH = 100
+EPOCHS = 100
+MIN_EPOCH = 50
 BATCH_SIZE = 128
 ATTENTION = True
 
@@ -25,13 +25,20 @@ RMSE = lambda x, y: mean_squared_error(x, y, squared=False)
 MAE = mean_absolute_error
 MAPE = mean_absolute_percentage_error
 
-covid_fname = "covid_20200301_20210619.csv"
+data_path = "./data"
+saved_path = './saved'
+image_path = './images/seq2seq'
+
+start_date = "20200303"
+end_date = "20210708"
+
+covid_fname = f"covid_{start_date}_{end_date}.csv"
 model_fname = f"seq2seq_attn({ATTENTION})_iw{INPUT_WIDTH}_lw{LABEL_WIDTH}_ls{LAYER_SIZE}.h5"
-feature_cols = ["decideDailyCnt"]
-label_cols = "decideDailyCnt"
+feature_cols = ["decideCnt"]
+label_cols = "decideCnt"
 
 
-def create_data_gen(data_path):
+def create_data_gen(csv_path):
     """ Data Generator 생성 함수
 
     Args:
@@ -40,7 +47,11 @@ def create_data_gen(data_path):
     Returns:
         data_gen (class): 데이터 셋이 포함된 DataGenerator 
     """
-    covid_data = pd.read_csv(data_path)
+    if os.path.exists(csv_path):
+        covid_data = pd.read_csv(csv_path)
+    else:
+        covid_data = get_nation_covid_data(start_date, end_date)
+        
     data_gen = DataGenerator(raw_data=covid_data,
                              input_width=INPUT_WIDTH, label_width=LABEL_WIDTH,
                              feature_cols=feature_cols,
@@ -69,7 +80,7 @@ def create_model_and_train(data_gen):
     """
     train_callbacks = [EarlyStopping(min_epoch=MIN_EPOCH, patience=50, 
                                      verbose=1, restore_best_weights=True),
-                       ModelCheckpoint(filepath=f"./models/{model_fname}",
+                       ModelCheckpoint(filepath=f"{saved_path}/{model_fname}",
                             save_best_only=True, save_weights_only=True,
                             min_epoch=MIN_EPOCH, verbose=1)]
 
@@ -106,53 +117,50 @@ def evaluation(y_true, y_pred, methods):
 
 
 if __name__=="__main__":
-    # data_gen = create_data_gen()
-    # seq2seq, history = create_model_and_train(data_gen)
+    data_gen = create_data_gen(f"{data_path}/{covid_fname}")
+    seq2seq, history = create_model_and_train(data_gen)
 
-    # os.makedirs("./images", exist_ok=True)
+    os.makedirs(image_path, exist_ok=True)
 
-    # plt.plot(history.history["loss"], label="loss")
-    # plt.plot(history.history["val_loss"], label="val_loss")
-    # plt.legend()
-    # plt.savefig(f"./images/model_history.png")
-    # plt.close()
+    plt.plot(history.history["loss"], label="loss")
+    plt.plot(history.history["val_loss"], label="val_loss")
+    plt.legend()
+    plt.savefig(f"{image_path}/seq2seq_history.png")
+    plt.close()
 
-    # # seq2seq = Seq2Seq(units=LAYER_SIZE, 
-    # #                   input_width=INPUT_WIDTH, feature_num=len(feature_cols),
-    # #                   label_width=LABEL_WIDTH, attention=ATTENTION)
-    # # seq2seq.model.load_weights(f"./models/{model_fname}")
+    seq2seq = Seq2Seq(units=LAYER_SIZE, 
+                      input_width=INPUT_WIDTH, feature_num=len(feature_cols),
+                      label_width=LABEL_WIDTH, attention=ATTENTION)
+    seq2seq.model.load_weights(f"{saved_path}/{model_fname}")
 
-    # for inp, targ in data_gen.dataset.batch(data_gen.data_size):
-    #     preds = seq2seq.predict(inp)
+    for inp, targ in data_gen.dataset.batch(data_gen.data_size):
+        preds = seq2seq.predict(inp)
 
-    with open("./data/test.pkl", "rb") as f:
-        targ, preds = pickle.load(f)
-    
-    with open(f"./data/{covid_fname[:-4]}_scaler.pkl", "rb") as f:
+    with open(f"{data_path}/{covid_fname[:-4]}_scaler.pkl", "rb") as f:
         scaler = pickle.load(f)
 
-    targ = scaler.inverse_transform(targ)
-    preds = scaler.inverse_transform(preds)
+    targ = scaler.inverse_transform(targ)[-data_gen.test_size:]
+    preds = scaler.inverse_transform(preds)[-data_gen.test_size:]
 
-    plt.plot(tf.concat([targ[-100:, 0], targ[-1, 1:]], axis=0))
-    for i, pred in enumerate(preds[-100:]):
+    plt.plot(tf.concat([targ[:, 0], targ[-1, 1:]], axis=0))
+    for i, pred in enumerate(preds):
         plt.plot(range(i, i+LABEL_WIDTH), pred)
-    plt.savefig("./images/model_predict_value(test).png")
+    plt.savefig(f"{image_path}/seq2seq_all_step.png")
     plt.close()
 
-    plt.plot(targ[-100:, 0], label="targ")
-    plt.plot(preds[-100:, 0], label="preds")
+    plt.plot(targ[:, 0], label="targ")
+    plt.plot(preds[:, 0], label="preds")
     plt.legend()
-    plt.savefig("./images/model_predict(test_step).png")
+    plt.savefig(f"{image_path}/seq2seq_0_step.png")
     plt.close()
 
-    # plt.plot(targ[:, LABEL_WIDTH-1], label="targ")
-    # plt.plot(preds[:, LABEL_WIDTH-1], label="preds")
-    # plt.legend()
-    # plt.savefig(f"./images/model_predict(test_step{LABEL_WIDTH-1}).png")
-    # plt.close()
+    plt.plot(targ[:, LABEL_WIDTH-1], label="targ")
+    plt.plot(preds[:, LABEL_WIDTH-1], label="preds")
+    plt.legend()
+    plt.savefig(f"{image_path}/seq2seq_{LABEL_WIDTH-1}_step.png")
+    plt.close()
 
-    # print(evaluation(scaler.inverse_transform(targ),
-    #                  scaler.inverse_transform(preds),
-    #                  methods=[RMSE, MAE, MAPE]))    
+    print(evaluation(scaler.inverse_transform(targ),
+                     scaler.inverse_transform(preds),
+                     methods=[RMSE, MAE, MAPE]))    
     print("done")

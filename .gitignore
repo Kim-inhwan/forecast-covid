@@ -1,6 +1,7 @@
 __pycache__/
 .vscode/
 .devcontainer/
-models/
+data/
+saved/
 images/
 kcda_api_key.txt
