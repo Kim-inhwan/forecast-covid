@@ -31,8 +31,16 @@ feature_cols = ["decideDailyCnt"]
 label_cols = "decideDailyCnt"
 
 
-def create_data_gen():
-    covid_data = pd.read_csv(f"./data/{covid_fname}")
+def create_data_gen(data_path):
+    """ Data Generator 생성 함수
+
+    Args:
+        data_path (str): 전체 csv 파일의 경로. utils.collect 참고.
+    
+    Returns:
+        data_gen (class): 데이터 셋이 포함된 DataGenerator 
+    """
+    covid_data = pd.read_csv(data_path)
     data_gen = DataGenerator(raw_data=covid_data,
                              input_width=INPUT_WIDTH, label_width=LABEL_WIDTH,
                              feature_cols=feature_cols,
@@ -43,6 +51,22 @@ def create_data_gen():
 
 
 def create_model_and_train(data_gen):
+    """ 모델 생성 및 학습 함수
+
+    Args:
+        data_gen (class): 데이터 셋이 포함된 DataGenerator
+
+    Returns:
+        seq2seq (class): Encoder-Decoder 구조의 Seq2Seq 모델
+        history (class): 학습 정보를 담고 있는 객체
+
+    Examples:
+        >>> seq2seq, history = create_model_and_train(data_gen)
+        >>> plt.plot(history.history['loss'])
+        >>> plt.show()
+        >>> seq2seq.predict(data_gen.test)
+        <tf.tensor: shape=(...) ... >
+    """
     train_callbacks = [EarlyStopping(min_epoch=MIN_EPOCH, patience=50, 
                                      verbose=1, restore_best_weights=True),
                        ModelCheckpoint(filepath=f"./models/{model_fname}",
@@ -60,16 +84,19 @@ def create_model_and_train(data_gen):
 
 
 def evaluation(y_true, y_pred, methods):
-    """
+    """ 모델이 예측한 값을 통해 모델을 평가하는 함수
+
         Args:
             y_true (numpy.array): (batch, LABEL_WIDTH) 형태의 실제 값
             y_pred (numpy.array): (batch, LABEL_WIDTH) 형태의 예측 값
-            methods (list): 평가에 사용할 메소드 리스트
+            methods (list): 평가에 사용할 메소드 리스트. methods 리스트 내부에 사용될 method는 기본적으로 리스트 형태의 x, y를 받아 결과를 출력하는 형태의 함수
 
         Returns:
-            results (numpy.array): (batch, len(methods)) 형태의 성능 평가 값
+            results (numpy.array): (batch, len(methods)) 형태의 성능 평가 값. 각 batch마다 methods를 사용한 성능의 평균을 반환
 
-        methods 리스트 내부에 사용될 method는 기본적으로 리스트 형태의 x, y를 받아 결과를 출력하는 형태의 함수
+        Examples:
+            >>> abs_diff = lambda x, y: abs(x-y)
+            >>> evaluation(y_true, y_pred, [abs_diff])
     """
     results = [[method(x, y) for method in methods] for x, y in zip(y_true, y_pred)]
     results = np.array(results)

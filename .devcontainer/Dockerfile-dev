@@ -1,8 +1,0 @@
-FROM tensorflow/tensorflow:latest-gpu
-
-COPY requirements-dev.txt .
-
-RUN python -m pip install -r requirements-dev.txt && apt-get update && apt-get install -y git
-
-WORKDIR /app
-COPY . /app

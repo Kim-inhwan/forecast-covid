@@ -7,7 +7,7 @@ class DataGenerator():
     시계열 형태의 pandas DataFrame을 window 크기에 맞춰 input과 label로 분리
 
     Attributes:
-        raw_data: (DataFrame) 크기에 맞는 데이터를 생성할 수 있는 raw data
+        raw_data: (pandas.DataFrame) 크기에 맞는 데이터를 생성할 수 있는 raw data
         input_width: (int) 입력 시퀀스의 길이
         label_width: (int) 라벨 시퀀스의 길이
         feature_cols: (list) 입력 feature의 컬럼 이름 목록
