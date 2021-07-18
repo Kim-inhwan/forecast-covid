@@ -37,6 +37,8 @@ def get_nation_covid_data(start_date, end_date, page_no=page_no, num_of_rows=num
         ValueError: API 요청에 대한 결과가 정상적이지 않을 때 발생
     """
 
+    # 파일 이름
+    fname = f"covid_{start_date}_{end_date}.csv"
     # 국내 코로나 현황 API
     service_url = "http://openapi.data.go.kr/openapi/service/rest/Covid19/getCovid19InfStateJson"
     query_params = "?" + urlencode({
@@ -64,7 +66,7 @@ def get_nation_covid_data(start_date, end_date, page_no=page_no, num_of_rows=num
                     pickle.dump(scaler, f)
                 covid_data.to_csv(f"{data_path}/{fname}", index=False)
                 return covid_data
-    raise ValueError(f"could not get response value from API, {service_url}")
+    raise ValueError(f"could not get response value from API, {service_url}, {response}")
 
 
 if __name__ == "__main__":

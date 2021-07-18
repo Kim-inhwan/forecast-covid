@@ -30,7 +30,7 @@ saved_path = './saved'
 image_path = './images/seq2seq'
 
 start_date = "20200303"
-end_date = "20210708"
+end_date = "20210717"
 
 covid_fname = f"covid_{start_date}_{end_date}.csv"
 model_fname = f"seq2seq_attn({ATTENTION})_iw{INPUT_WIDTH}_lw{LABEL_WIDTH}_ls{LAYER_SIZE}.h5"
@@ -47,9 +47,11 @@ def create_data_gen(csv_path):
     Returns:
         data_gen (class): 데이터 셋이 포함된 DataGenerator 
     """
+    print("Load data...")
     if os.path.exists(csv_path):
         covid_data = pd.read_csv(csv_path)
     else:
+        print("Request API...")
         covid_data = get_nation_covid_data(start_date, end_date)
         
     data_gen = DataGenerator(raw_data=covid_data,
