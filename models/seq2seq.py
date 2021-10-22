@@ -12,13 +12,14 @@ class Encoder(tf.keras.layers.Layer):
 
     Attributes:
         units: (int) GRU의 차원
+        dropout: (float) dropout
     """
-    def __init__(self, units, *args, **kwargs):
+    def __init__(self, units, dropout, *args, **kwargs):
         super(Encoder, self).__init__(*args, **kwargs)
         self.units = units
         self.gru = tf.keras.layers.GRU(units, 
                                        return_sequences=True, 
-                                       return_state=True,)
+                                       return_state=True, dropout=dropout)
     
     def call(self, inputs, training=False):
         outputs, state = self.gru(inputs)
@@ -47,77 +48,35 @@ class Decoder(tf.keras.layers.Layer):
 
     Attributes:
         units: (int) GRU의 차원
-        step: (int) output sequences의 길이
+        dropout: (float) dropout
         attention: (bool) Attenion layer를 사용할 지 여부
     """
-    def __init__(self, units, step, attention=False, *args, **kwargs):
+    def __init__(self, units, dropout, attention=False, *args, **kwargs):
         super(Decoder, self).__init__(*args, **kwargs)
         self.units = units
-        self.step = step
         self.attention = attention
 
         self.gru = tf.keras.layers.GRU(units, 
                                        return_sequences=True,
-                                       return_state=True,)
+                                       return_state=True, dropout=dropout)
         if attention:
             self.attn = tf.keras.layers.Attention()
-        self.dense = tf.keras.layers.Dense(1, activation="relu")
+        self.dense = tf.keras.layers.Dense(1)
 
     def call(self, inputs, hidden, enc_output, training=False):
-        # inputs => (batch, label_width)
+        # inputs => (batch, label_width, feature_num)
         # hidden => (batch, enc_dim)
         # enc_output => (batch, input_width, enc_dim)
 
-        outputs = None
-        attn_weights = None
-        sub_input = inputs[:, tf.newaxis, tf.newaxis, 0] # (batch, 1, 1)
-        state = hidden
-        # 학습 과정일 경우 teacher forcing을 사용함
-        for t in range(self.step):
-            if self.attention:
-                # context_vec => (batch, 1, enc_dim)
-                context_vec, attn_weight = self.attn([state[:, tf.newaxis, :,], enc_output],
-                                                     return_attention_scores=True)
-                # sub_input과 context_vec을 연결함. (attetnion 적용)
-                # sub_input => (batch, 1, 1+enc_dim)
-                sub_input = tf.concat([sub_input, context_vec], axis=-1)
-            
-            # output => (batch, 1, dec_dim)
-            output, state = self.gru(sub_input, initial_state=state) 
-
-            # (batch, 1, dec_dim) => (batch, 1, 1)
-            output = self.dense(output)
-
-            # output이 None이 아닐 경우
-            if outputs is not None:
-                # (batch, "here concat", dec_dim) step을 이어붙임
-                outputs = tf.concat([outputs, output], axis=1)
-            else:
-                # None이면 초기 값으로 할당
-                outputs = output
-
-            if self.attention:
-                if attn_weights is not None:
-                    # (batch, "here concat", dec_dim) step을 이어붙임
-                    attn_weights = tf.concat([attn_weights, attn_weight], axis=1)
-                else:
-                    # None이면 초기 값으로 할당
-                    attn_weights = attn_weight
-
-            # 마지막 step일 때 t+1로 인해 index error가 발생하므로 pass
-            if t < self.step-1:
-                if training:
-                    # 학습 시, 다음 실제 값을 decoder의 입력으로 사용
-                    sub_input = inputs[:, tf.newaxis, tf.newaxis, t+1]
-                else:
-                    # 예측 시, 예측 값을 다음 입력으로 사용
-                    sub_input = output
-        
-        # (batch, predict_step)
-        outputs = tf.squeeze(outputs, axis=[2])
-        self.attn_wegiths = attn_weights
-
-        return outputs
+        outputs, state = self.gru(inputs, initial_state=hidden)
+        if self.attn:
+            # Luong attention
+            # context_vec => (batch, label_width, dec_dim)
+            context_vec = self.attn([outputs, enc_output])
+            # outputs => (batch, label_width, dec_dim*2)
+            outputs = tf.concat([outputs, context_vec], axis=-1)
+        outputs = self.dense(outputs)
+        return tf.squeeze(outputs, axis=-1)
 
     def get_config(self):
         config = super(Decoder, self).get_config()
@@ -125,56 +84,17 @@ class Decoder(tf.keras.layers.Layer):
         return config
 
 
+def get_model(units, input_width, input_feature,
+              label_width, label_feature, dropout, attention=False):
+    tf.keras.backend.clear_session()
+    enc_input = tf.keras.Input(shape=(input_width, input_feature))
+    encoder = Encoder(units, dropout)
+    dec_input = tf.keras.Input(shape=(None, label_feature))
+    decoder = Decoder(units, dropout, attention=attention)
 
-class Seq2Seq():
-    """ Encoder-Decoder 구조의 Seq2Seq 모델
+    enc_outputs, enc_state = encoder(enc_input)
+    dec_outputs = decoder(dec_input, enc_state, enc_outputs)
 
-    Attributes:
-        units: (int) 인코더와 디코더에 사용되는 GRU의 차원의 크기
-        input_width: (int) 인코더에 입력될 인풋의 길이
-        feature_num: (int) 인코더에 입력될 인풋의 차원의 크기
-        label_width: (int) 디코더에서 출력할 아웃풋의 길이
-        attention: (bool) 어텐션 레이어를 사용할 지 여부
-        encoder: (class) 인코더 레이어
-        decoder: (class) 디코더 레이어
-        model: (class) 인코더-디코더 구조의 keras 모델
-
-    Examples:
-        >>> seq2seq = Seq2Seq(64, 10, 2, 3, True)
-        >>> prediction = seq2seq.predict((tf.random.uniform(32, 10, 2), tf.random.uniform(32, 1)))
-        >>> prediction.shape
-        (32, 3)
-
-    """
-    def __init__(self, units, input_width, feature_num, label_width,
-                 attention=False):
-        self.units = units
-        self.input_width = input_width
-        self.feature_num = feature_num
-        self.label_width = label_width
-        self.attention = attention
-
-        self._build()
-
-    def _build(self):
-        self.enc_input = tf.keras.Input(shape=(self.input_width, self.feature_num))
-        self.encoder = Encoder(self.units)
-        self.dec_input = tf.keras.Input(shape=(self.label_width))
-        self.decoder = Decoder(self.units, self.label_width, attention=self.attention)
-
-        enc_outputs, enc_state = self.encoder(self.enc_input)
-        dec_outputs = self.decoder(self.dec_input, enc_state, enc_outputs)
-
-        self.model = tf.keras.Model(inputs=(self.enc_input, self.dec_input),
-                                    outputs=dec_outputs)
-        self.model.compile(loss="mse", optimizer="adam")
-
-    def train(self, train_ds, val_ds=None, epochs=1, batch_size=None,
-              verbose="auto", callbacks=None, **kwargs):
-        history = self.model.fit(train_ds, validation_data=val_ds, 
-                                 epochs=epochs, batch_size=batch_size, verbose=verbose,
-                                 callbacks=callbacks, **kwargs)
-        return history
-
-    def predict(self, inputs):
-        return self.model(inputs, training=False)
+    model = tf.keras.Model((enc_input, dec_input), dec_outputs)
+    model.compile(loss='mse', optimizer='adam')
+    return model

@@ -8,3 +8,4 @@ sklearn==0.0
 tqdm==4.61.1
 xmltodict==0.12.0
 statsmodels==0.12.2
+pmdarima==1.8.2

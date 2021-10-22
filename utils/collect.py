@@ -1,9 +1,10 @@
 from urllib.request import urlopen, Request
 from urllib.parse import urlencode, quote_plus
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 import xmltodict
 import pickle
 import pandas as pd
+import numpy as np
 import os
 
 
@@ -11,7 +12,7 @@ with open("./kcda_api_key.txt", "r") as f:
     service_key = f.read() # API 키를 파일로 부터 읽음
 
 start_date = "20200303" # 요청 시작일
-end_date = "20210708" # 요청 마감일
+end_date = "20210805" # 요청 마감일
 page_no = "1" # 페이지 번호
 num_of_rows = "10" # 페이지당 결과 수
 
@@ -60,10 +61,11 @@ def get_nation_covid_data(start_date, end_date, page_no=page_no, num_of_rows=num
                 covid_data = covid_data.replace({"null": None, "NULL": None, "-": None})
                 covid_data = covid_data.sort_values(by=["stateDt"], ignore_index=True)
                 os.makedirs(data_path, exist_ok=True)
-                scaler = MinMaxScaler()
-                scaler.fit(covid_data[["decideCnt"]].values)
+                scaler = StandardScaler()
+                scaler.fit(np.diff(covid_data[["decideCnt"]].astype("int32"), n=2, axis=0))
                 with open(f"{data_path}/{fname[:-4]}_scaler.pkl", "wb") as f:
                     pickle.dump(scaler, f)
+
                 covid_data.to_csv(f"{data_path}/{fname}", index=False)
                 return covid_data
     raise ValueError(f"could not get response value from API, {service_url}, {response}")

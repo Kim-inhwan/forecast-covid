@@ -1,4 +1,3 @@
-from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf
 
 
@@ -26,14 +25,18 @@ class DataSlicer():
     """
 
     def __init__(self, input_data, label_data, input_width, label_width,
+                 teacher_force=False,
                  train_split=0.6, val_split=0.2, test_split=0.2):
         self.input_data = input_data
         self.label_data = label_data
         self.input_width = input_width
         self.label_width = label_width
+        self.teacher_force = teacher_force
+        self.training = label_data is not None and label_width != 0
         self.window_size = input_width + label_width
         if train_split+val_split+test_split!=1.0:
             raise ValueError(f"Split values error, sum of split values must be 1. train, val, test split values {train_split}, {val_split}, {test_split}.")
+        self.data_size = len(input_data)
         self.train_size = int(len(input_data)*train_split)
         self.val_size = int(len(input_data)*val_split)
         self.test_size = len(input_data)-self.train_size-self.val_size
@@ -44,14 +47,21 @@ class DataSlicer():
             return sub.batch(self.window_size, drop_remainder=True)
         
         def slice_input_label(input_batch, label_batch):
-            return input_batch[:self.input_width], label_batch[-self.label_width:]
+            if self.teacher_force:
+                return (input_batch[:self.input_width], label_batch[-self.label_width-1:-1]), label_batch[-self.label_width:]
+            else:
+                return input_batch[:self.input_width], label_batch[-self.label_width:]
 
         input_ds = tf.data.Dataset.from_tensor_slices(input_data)
         input_ds = input_ds.window(self.window_size, shift=1).flat_map(sub_to_branch)
-        label_ds = tf.data.Dataset.from_tensor_slices(label_data)
-        label_ds = label_ds.window(self.window_size, shift=1).flat_map(sub_to_branch)
 
-        dataset = tf.data.Dataset.zip((input_ds, label_ds)).map(slice_input_label)
+        if self.training:
+            label_ds = tf.data.Dataset.from_tensor_slices(label_data)
+            label_ds = label_ds.window(self.window_size, shift=1).flat_map(sub_to_branch)
+            dataset = tf.data.Dataset.zip((input_ds, label_ds)).map(slice_input_label)
+        else:
+            dataset = input_ds
+
         return dataset
 
     @property

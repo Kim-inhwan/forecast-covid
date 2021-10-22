@@ -8,17 +8,18 @@ from sklearn.metrics import (mean_absolute_error,
                              mean_absolute_percentage_error,
                              mean_squared_error)
 from utils.callbacks import EarlyStopping, ModelCheckpoint
-from utils.dataset import DataGenerator
+from utils.dataset import DataSlicer
 from utils.collect import get_nation_covid_data
-from models.seq2seq import Seq2Seq
+from models import seq2seq
 
 
-INPUT_WIDTH = 21
+INPUT_WIDTH = 14
 LABEL_WIDTH = 15
-LAYER_SIZE = 256
-EPOCHS = 100
+LAYER_SIZE = 512
+DROPOUT = 0.2
+EPOCHS = 200
 MIN_EPOCH = 50
-BATCH_SIZE = 128
+BATCH_SIZE = 256
 ATTENTION = True
 
 RMSE = lambda x, y: mean_squared_error(x, y, squared=False)
@@ -30,70 +31,13 @@ saved_path = './saved'
 image_path = './images/seq2seq'
 
 start_date = "20200303"
-end_date = "20210717"
+end_date = "20210805"
 
 covid_fname = f"covid_{start_date}_{end_date}.csv"
-model_fname = f"seq2seq_attn({ATTENTION})_iw{INPUT_WIDTH}_lw{LABEL_WIDTH}_ls{LAYER_SIZE}.h5"
+scaler_fname = f"covid_{start_date}_{end_date}_scaler.pkl"
+model_fname = f"seq2seq_iw{INPUT_WIDTH}_lw{LABEL_WIDTH}_ls{LAYER_SIZE}_do{DROPOUT}_diff{2}.h5"
 feature_cols = ["decideCnt"]
-label_cols = "decideCnt"
-
-
-def create_data_gen(csv_path):
-    """ Data Generator 생성 함수
-
-    Args:
-        data_path (str): 전체 csv 파일의 경로. utils.collect 참고.
-    
-    Returns:
-        data_gen (class): 데이터 셋이 포함된 DataGenerator 
-    """
-    print("Load data...")
-    if os.path.exists(csv_path):
-        covid_data = pd.read_csv(csv_path)
-    else:
-        print("Request API...")
-        covid_data = get_nation_covid_data(start_date, end_date)
-        
-    data_gen = DataGenerator(raw_data=covid_data,
-                             input_width=INPUT_WIDTH, label_width=LABEL_WIDTH,
-                             feature_cols=feature_cols,
-                             label_cols=label_cols,
-                             norm=True, training=True,
-                             train_split=0.6, val_split=0.15, test_split=0.25)
-    return data_gen
-
-
-def create_model_and_train(data_gen):
-    """ 모델 생성 및 학습 함수
-
-    Args:
-        data_gen (class): 데이터 셋이 포함된 DataGenerator
-
-    Returns:
-        seq2seq (class): Encoder-Decoder 구조의 Seq2Seq 모델
-        history (class): 학습 정보를 담고 있는 객체
-
-    Examples:
-        >>> seq2seq, history = create_model_and_train(data_gen)
-        >>> plt.plot(history.history['loss'])
-        >>> plt.show()
-        >>> seq2seq.predict(data_gen.test)
-        <tf.tensor: shape=(...) ... >
-    """
-    train_callbacks = [EarlyStopping(min_epoch=MIN_EPOCH, patience=50, 
-                                     verbose=1, restore_best_weights=True),
-                       ModelCheckpoint(filepath=f"{saved_path}/{model_fname}",
-                            save_best_only=True, save_weights_only=True,
-                            min_epoch=MIN_EPOCH, verbose=1)]
-
-    seq2seq = Seq2Seq(units=LAYER_SIZE, 
-                      input_width=INPUT_WIDTH, feature_num=len(feature_cols),
-                      label_width=LABEL_WIDTH, attention=ATTENTION)
-    history = seq2seq.train(data_gen.train.batch(BATCH_SIZE), 
-                            val_ds=data_gen.val.batch(BATCH_SIZE),
-                            epochs=EPOCHS, batch_size=BATCH_SIZE, verbose=1,
-                            callbacks=train_callbacks)
-    return seq2seq, history
+label_cols = ["decideCnt"]
 
 
 def evaluation(y_true, y_pred, methods):
@@ -119,9 +63,37 @@ def evaluation(y_true, y_pred, methods):
 
 
 if __name__=="__main__":
-    data_gen = create_data_gen(f"{data_path}/{covid_fname}")
-    seq2seq, history = create_model_and_train(data_gen)
+    print("Load data...")
+    csv_path = f"{data_path}/{covid_fname}"
+    scaler_path = f"{data_path}/{scaler_fname}"
 
+    if os.path.exists(csv_path):
+        covid_data = pd.read_csv(csv_path)
+    else:
+        print("Request API...")
+        covid_data = get_nation_covid_data(start_date, end_date)
+    
+    with open(scaler_path, "rb") as f:
+        scaler = pickle.load(f)
+
+    target_input_data = np.diff(covid_data[feature_cols], n=2, axis=0)
+    target_label_data = np.diff(covid_data[label_cols], n=2, axis=0)
+
+    data_slicer = DataSlicer(input_data=scaler.transform(target_input_data),
+                            label_data=scaler.transform(target_label_data),
+                            input_width=INPUT_WIDTH, label_width=LABEL_WIDTH,
+                            teacher_force=True)
+
+    seq2seq_model = seq2seq.get_model(LAYER_SIZE, INPUT_WIDTH, len(feature_cols),
+                                      LABEL_WIDTH, len(label_cols), DROPOUT, ATTENTION)
+    history = seq2seq_model.fit(data_slicer.train.batch(BATCH_SIZE),
+                                validation_data=data_slicer.val.batch(BATCH_SIZE),
+                                epochs=EPOCHS, callbacks=[
+                                    EarlyStopping(min_epoch=EPOCHS//4, patience=EPOCHS//10),
+                                    ModelCheckpoint(f"{saved_path}/seq2seq_iw{INPUT_WIDTH}_lw{LABEL_WIDTH}_ls{LAYER_SIZE}_do{DROPOUT}_diff{2}.h5",
+                                                    save_best_only=True, save_weights_only=True, min_epoch=EPOCHS//4)
+                                ])
+    
     os.makedirs(image_path, exist_ok=True)
 
     plt.plot(history.history["loss"], label="loss")
@@ -130,19 +102,20 @@ if __name__=="__main__":
     plt.savefig(f"{image_path}/seq2seq_history.png")
     plt.close()
 
-    seq2seq = Seq2Seq(units=LAYER_SIZE, 
-                      input_width=INPUT_WIDTH, feature_num=len(feature_cols),
-                      label_width=LABEL_WIDTH, attention=ATTENTION)
-    seq2seq.model.load_weights(f"{saved_path}/{model_fname}")
+    seq2seq_model.load_weights(f"{saved_path}/seq2seq_iw{INPUT_WIDTH}_lw{LABEL_WIDTH}_ls{LAYER_SIZE}_do{DROPOUT}_diff{2}.h5")
 
-    for inp, targ in data_gen.dataset.batch(data_gen.data_size):
-        preds = seq2seq.predict(inp)
+    total_inp, total_targ = list(data_slicer.total.batch(data_slicer.data_size))[0]
 
-    with open(f"{data_path}/{covid_fname[:-4]}_scaler.pkl", "rb") as f:
-        scaler = pickle.load(f)
+    enc_out, enc_state = seq2seq_model.layers[2](total_inp[0])
+    total_prds = tf.cast(total_inp[1][:, :1], dtype=tf.float32)
+    for step in range(LABEL_WIDTH):
+        prd = seq2seq_model.layers[3](total_prds, enc_state, enc_out)
+        total_prds = tf.concat([total_prds, prd[:, -1:, tf.newaxis]], axis=1)
+    total_prds = tf.squeeze(total_prds[:, 1:], axis=-1)
+    total_targ = tf.squeeze(total_targ, axis=-1)
 
-    targ = scaler.inverse_transform(targ)[-data_gen.test_size:]
-    preds = scaler.inverse_transform(preds)[-data_gen.test_size:]
+    targ = scaler.inverse_transform(total_targ)[-data_slicer.test_size:]
+    preds = scaler.inverse_transform(total_prds)[-data_slicer.test_size:]
 
     plt.plot(tf.concat([targ[:, 0], targ[-1, 1:]], axis=0))
     for i, pred in enumerate(preds):
@@ -162,7 +135,7 @@ if __name__=="__main__":
     plt.savefig(f"{image_path}/seq2seq_{LABEL_WIDTH-1}_step.png")
     plt.close()
 
-    print(evaluation(scaler.inverse_transform(targ),
-                     scaler.inverse_transform(preds),
+    print(evaluation(targ,
+                     preds,
                      methods=[RMSE, MAE, MAPE]))    
     print("done")
