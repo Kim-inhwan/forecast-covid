@@ -5,5 +5,4 @@ data/
 saved/
 images/
 *_key.txt
-lightning_logs
 .DS_Store
